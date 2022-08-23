@@ -241,7 +241,7 @@ def main() -> None:
     updater = Updater(bot_token)
 
     dispatcher = updater.dispatcher
-    Module.getAllPlan()
+    
     dispatcher.add_handler(CommandHandler("s", s, run_async=True))
     dispatcher.add_handler(CommandHandler(
         "bind", bind, filters=Filters.chat_type.private, run_async=True))
