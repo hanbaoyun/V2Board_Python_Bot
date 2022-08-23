@@ -6,7 +6,7 @@ import pymysql
 import time
 from sshtunnel import SSHTunnelForwarder
 
-from telegram import Update, Bot
+from telegram import Update, Bot,InlineKeyboardMarkup,InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
 
 # Telegram Bot Token
@@ -106,32 +106,48 @@ def myinfo(update: Update, context: CallbackContext) -> None:
         if result is False:
             callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
-            text = '📋*个人信息*\n'
-            User_id = user['id']
-            Register_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(user['register']))
-            Plan_id = Module.onSearchPlan(user['plan'])
-            Expire_time = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(user['expire']))
-            Data_Upload = round(user['upload'] / 1024 / 1024 / 1024, 2)
-            Data_Download = round(user['download'] / 1024 / 1024 / 1024, 2)
-            Data_Total = round(user['total'] / 1024 / 1024 / 1024, 2)
-            Data_Last = round(
-                (user['total']-user['download']-user['upload']) / 1024 / 1024 / 1024, 2)
-            Data_Time = time.strftime(
-                "%Y-%m-%d %H:%M:%S", time.localtime(user['time']))
+            if user['plan'] is not None:
+                text = '📋*个人信息*\n'
+                User_id = user['id']
+                Register_time = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(user['register']))
+                Plan_id = Module.onSearchPlan(user['plan'])
+                Expire_time = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(user['expire']))
+                Data_Upload = round(user['upload'] / 1024 / 1024 / 1024, 2)
+                Data_Download = round(user['download'] / 1024 / 1024 / 1024, 2)
+                Data_Total = round(user['total'] / 1024 / 1024 / 1024, 2)
+                Data_Last = round(
+                    (user['total']-user['download']-user['upload']) / 1024 / 1024 / 1024, 2)
+                Data_Time = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(user['time']))
 
-            text = f'{text}\n🎲*UID：* {User_id}'
-            text = f'{text}\n⌚️*注册时间：* {Register_time}'
-            text = f'{text}\n📚*套餐类型：* {Plan_id}'
-            text = f'{text}\n📌*到期时间：* {Expire_time}'
-            text = f'{text}\n'
-            text = f'{text}\n📤*上传流量：* {Data_Upload} GB'
-            text = f'{text}\n📥*下载流量：* {Data_Download} GB'
-            text = f'{text}\n📃*剩余流量：* {Data_Last} GB'
-            text = f'{text}\n📜*总计流量：* {Data_Total} GB'
-            text = f'{text}\n📊*上次使用：* {Data_Time}'
-            callback = reply(text)
+                text = f'{text}\n🎲*UID：* {User_id}'
+                text = f'{text}\n⌚️*注册时间：* {Register_time}'
+                text = f'{text}\n📚*套餐类型：* {Plan_id}'
+                text = f'{text}\n📌*到期时间：* {Expire_time}'
+                text = f'{text}\n'
+                text = f'{text}\n📤*上传流量：* {Data_Upload} GB'
+                text = f'{text}\n📥*下载流量：* {Data_Download} GB'
+                text = f'{text}\n📃*剩余流量：* {Data_Last} GB'
+                text = f'{text}\n📜*总计流量：* {Data_Total} GB'
+                text = f'{text}\n📊*上次使用：* {Data_Time}'
+                callback = reply(text)
+            else:
+                callback = reply('❌*错误*\n你的账号没有购买过订阅！')
+        if update.message.chat.type != 'private':
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
+    except Exception as error:
+        logging.error(error)
+
+
+def buyplan(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    uid = update.message.from_user.id
+    callback = None
+    try:
+        reply_markup = Module.onBuyPlan()
+        callback = reply('📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址',reply_markup=reply_markup)
         if update.message.chat.type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
     except Exception as error:
@@ -140,7 +156,7 @@ def myinfo(update: Update, context: CallbackContext) -> None:
 
 class Module():
     def autoDelete(update, chatid, messageid):
-        time.sleep(10)
+        time.sleep(30)
         bot.deleteMessage(chat_id=chatid, message_id=messageid)
         update.message.delete()
 
@@ -187,6 +203,25 @@ class Module():
         result = cursor.fetchone()
         return result[0]
 
+    def getAllPlan():
+        #return planID & Name (Only enable plan)
+        cursor.execute(
+            "SELECT id,name FROM v2_plan WHERE `show` = 1")
+        result = cursor.fetchall()
+        return result
+        # {v2_url}/#/plan/1
+
+    def onBuyPlan():
+        plan = Module.getAllPlan()
+        keyboard = []
+        url = f'{v2_url}/#/plan/'
+        for i in plan:
+            keyboard.append([InlineKeyboardButton(text=f'购买 {i[1]}', url=f"{url}{i[0]}")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        return reply_markup
+        
+
+
 
 class Command():
     def onBind(email,password):
@@ -206,13 +241,14 @@ def main() -> None:
     updater = Updater(bot_token)
 
     dispatcher = updater.dispatcher
-
+    Module.getAllPlan()
     dispatcher.add_handler(CommandHandler("s", s, run_async=True))
     dispatcher.add_handler(CommandHandler(
         "bind", bind, filters=Filters.chat_type.private, run_async=True))
     dispatcher.add_handler(CommandHandler(
         "bind", bindingroup, filters=Filters.chat_type.groups, run_async=True))
     dispatcher.add_handler(CommandHandler("myinfo", myinfo, run_async=True))
+    dispatcher.add_handler(CommandHandler("buyplan", buyplan, run_async=True))
 
     updater.start_polling()
     updater.idle()
