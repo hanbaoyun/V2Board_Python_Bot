@@ -7,7 +7,7 @@ import time
 from sshtunnel import SSHTunnelForwarder
 
 from telegram import Update, Bot,InlineKeyboardMarkup,InlineKeyboardButton
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
+from telegram.ext import Updater, CommandHandler, CallbackContext, Filters
 
 # Telegram Bot Token
 bot_token = ''
@@ -48,7 +48,6 @@ db = pymysql.connect(host=v2_db_url,
                      password=v2_db_pass,
                      database=v2_db_name,
                      port=v2_db_port)
-cursor = db.cursor()
 
 # Debugging
 def s(update: Update, context: CallbackContext) -> None:
@@ -66,9 +65,7 @@ def bind(update: Update, context: CallbackContext) -> None:
                 if Command.onBind(email,password) is True:
                     if Module.onSearchViaMail(email) is False:
                         reply('✔️*成功*\n你已成功绑定账号了！')
-                        cursor.execute(
-                            "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
-                        db.commit()
+                        Module.onBind(uid,email)
                     else:
                         reply(
                             '❌*错误*\n这个账号已绑定到别的Telegram了！')
@@ -163,13 +160,14 @@ class Module():
     def onSearchViaTG(uid):
         #args TelegramID
         #return boolean, userdata as dict
-        cursor.execute(f"SELECT * FROM v2_user WHERE telegram_id = {uid}")
-        result = cursor.fetchone()
-        if result is None:
-            user = {}
-            return False, user
-        else:
-            user = {
+        with db.cursor() as cursor:
+            cursor.execute(f"SELECT * FROM v2_user WHERE telegram_id = {uid}")
+            result = cursor.fetchone()
+            if result is None:
+                user = {}
+                return False, user
+            else:
+                user = {
                 'id': result[0],
                 'tg': result[2],
                 'email': result[3],
@@ -180,32 +178,40 @@ class Module():
                 'total': result[15],
                 'plan': result[23],
                 'expire': result[28],
-                'register': result[29]
-            }
-            return True, user
+                'register': result[29]}
+                return True, user
 
     def onSearchViaMail(email):
         #args email
         #return boolean, TelegramID
-        cursor.execute(
+        with db.cursor() as cursor:
+            cursor.execute(
             "SELECT telegram_id FROM v2_user WHERE email = %s", (email))
-        result = cursor.fetchone()
-        if result[0] is None:
-            return False,0
-        else:
-            return True, result[0]
+            result = cursor.fetchone()
+            if result[0] is None:
+                return False,0
+            else:
+                return True, result[0]
 
     def onSearchPlan(planid):
         #args planid
         #return planname
-        cursor.execute(
+        with db.cursor() as cursor:
+            cursor.execute(
             "SELECT name FROM v2_plan WHERE id = %s", (planid))
-        result = cursor.fetchone()
-        return result[0]
+            result = cursor.fetchone()
+            return result[0]
+
+    def onBind(uid,email):
+        with db.cursor() as cursor:
+            cursor.execute(
+                "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
+        db.commit()
 
     def getAllPlan():
         #return planID & Name (Only enable plan)
-        cursor.execute(
+        with db.cursor() as cursor:
+            cursor.execute(
             "SELECT id,name FROM v2_plan WHERE `show` = 1")
         result = cursor.fetchall()
         return result
