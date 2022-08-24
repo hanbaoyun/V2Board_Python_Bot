@@ -11,6 +11,9 @@ from telegram.ext import Updater, CommandHandler, CallbackContext, Filters
 
 # Telegram Bot Token
 bot_token = ''
+# Hook Infomation
+tg_admin = 0
+tg_group = 0
 # V2Board Infomation
 v2_url = 'https://awesomeV2Board.com' # without '/' symbol
 # V2Board MySQL Database
@@ -56,81 +59,127 @@ def s(update: Update, context: CallbackContext) -> None:
     print(update)
 
 
+def ping(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    uid = update.message.from_user.id
+    gid = update.message.chat.id
+    chat_type = update.message.chat.type
+
+    text = '💥*嘭*\n'
+    uuid = f'{text}\n你的ID为：`{uid}`'
+
+    if chat_type == 'private':
+        reply(uuid)
+    elif gid == tg_group:
+        group = f'\n群组ID为：`{gid}`'
+        if update.message.from_user.is_bot is False:
+            callback = reply(f'{uuid}{group}')
+        else:
+            callback = reply(f'{text}{group}')
+        Module.autoDelete(update, callback.chat.id, callback.message_id)
+
+
 def bind(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
+    gid = update.message.chat.id
     chat_type = update.message.chat.type
-    try:
-        result, user = Module.onSearchViaID('telegram_id', uid)
-        if chat_type != 'private':
+
+    result, user = Module.onSearchViaID('telegram_id', uid)
+
+    if chat_type == 'private':
+        if result is False:
+            if len(context.args) == 2:
+                email = context.args[0]
+                password = context.args[1]
+                if Module.onLogin(email, password) is True:
+                    result, tig = Module.onSearchViaMail(email)
+                    if result is False:
+                        reply('✔️*成功*\n你已成功绑定 Telegram 了！')
+                        Command.onBind(uid, email)
+                    else:
+                        reply('❌*错误*\n这个账号已绑定到别的 Telegram 了！')
+                else:
+                    reply('❌*错误*\n邮箱或密码错误了！')
+            else:
+                reply('❌*错误*\n正确的格式为：/bind 邮箱 密码')
+        else:
+            reply('❌*错误*\n你已经绑定过账号了！')
+    else:
+        if gid == tg_group:
             if result is False:
                 callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
             else:
                 callback = reply('❌*错误*\n你已经绑定过账号了！')
             Module.autoDelete(update, callback.chat.id, callback.message_id)
-        else:
-            if result is False:
-                if len(context.args) == 2:
-                    email = context.args[0]
-                    password = context.args[1]
-                    if Module.onLogin(email, password) is True:
-                        result, tig = Module.onSearchViaMail(email)
-                        if result is False:
-                            reply('✔️*成功*\n你已成功绑定 Telegram 了！')
-                            Command.onBind(uid, email)
-                        else:
-                            reply('❌*错误*\n这个账号已绑定到别的 Telegram 了！')
-                    else:
-                        reply('❌*错误*\n邮箱或密码错误了！')
-                else:
-                    reply('❌*错误*\n正确的格式为：/bind 邮箱 密码')
-            else:
-                reply('❌*错误*\n你已经绑定过账号了！')
-    except Exception as error:
-        logging.error(error)
-
 
 def unbind(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
+    gid = update.message.chat.id
     chat_type = update.message.chat.type
-    try:
-        result, user = Module.onSearchViaID('telegram_id', uid)
-        if chat_type != 'private':
+
+    result, user = Module.onSearchViaID('telegram_id', uid)
+
+    if chat_type == 'private':
+        if result is False:
+            reply('❌*错误*\n你还没有绑定过账号！')
+        else:
+            if len(context.args) == 2:
+                email = context.args[0]
+                password = context.args[1]
+                if Module.onLogin(email, password) is True:
+                    result, tid = Module.onSearchViaMail(email)
+                    if tid == uid:
+                        reply('✔️*成功*\n你已成功解绑 Telegram 了！')
+                        Command.onUnBind(email)
+                    else:
+                        reply('❌*错误*\n这个账号与绑定的 Telegram 不匹配！')
+                else:
+                    reply('❌*错误*\n邮箱或密码错误了！')
+            else:
+                reply('❌*错误*\n正确的格式为：/unbind 邮箱 密码')
+    else:
+        if gid == tg_group:
             if result is False:
                 callback = reply('❌*错误*\n你还没有绑定过账号！')
             else:
                 callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
             Module.autoDelete(update, callback.chat.id, callback.message_id)
+
+
+def mysub(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    uid = update.message.from_user.id
+    gid = update.message.chat.id
+    chat_type = update.message.chat.type
+
+    result, user = Module.onSearchViaID('telegram_id', uid)
+
+    if chat_type == 'private':
+        if result is False:
+            reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
+            text, reply_markup = Command.onMySub(user['token'])
+            reply(text)
+    else:
+        if gid == tg_group:
             if result is False:
-                callback = reply('❌*错误*\n你还没有绑定过账号！')
+                callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
             else:
-                if len(context.args) == 2:
-                    email = context.args[0]
-                    password = context.args[1]
-                    if Module.onLogin(email, password) is True:
-                        result, tid = Module.onSearchViaMail(email)
-                        if tid == uid:
-                            reply('✔️*成功*\n你已成功解绑 Telegram 了！')
-                            Command.onUnBind(email)
-                        else:
-                            reply('❌*错误*\n这个账号与绑定的 Telegram 不匹配！')
-                    else:
-                        reply('❌*错误*\n邮箱或密码错误了！')
-                else:
-                    reply('❌*错误*\n正确的格式为：/unbind 邮箱 密码')
-    except Exception as error:
-        logging.error(error)
+                callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
 
 
 def myinfo(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
+    gid = update.message.chat.id
     chat_type = update.message.chat.type
-    callback = None
-    try:
-        result, user = Module.onSearchViaID('telegram_id', uid)
+
+    result, user = Module.onSearchViaID('telegram_id', uid)
+    
+    if chat_type == 'private' or gid == tg_group:
         if result is False:
             callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
@@ -141,41 +190,17 @@ def myinfo(update: Update, context: CallbackContext) -> None:
                 callback = reply('❌*错误*\n你的账号没有购买过订阅！')
         if chat_type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
-    except Exception as error:
-        logging.error(error)
-
-
-def mysub(update: Update, context: CallbackContext) -> None:
-    reply = update.message.reply_markdown
-    uid = update.message.from_user.id
-    chat_type = update.message.chat.type
-    callback = None
-    try:
-        result, user = Module.onSearchViaID('telegram_id', uid)
-        if chat_type != 'private':
-            if result is False:
-                callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
-            else:
-                callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
-            Module.autoDelete(update, callback.chat.id, callback.message_id)
-        else:
-            if result is False:
-                reply('❌*错误*\n请先绑定账号后才进行操作！')
-            else:
-                text, reply_markup = Command.onMySub(user['token'])
-                reply(text)
-
-    except Exception as error:
-        logging.error(error)
 
 
 def myinvite(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
+    gid = update.message.chat.id
     chat_type = update.message.chat.type
-    callback = None
-    try:
-        result, user = Module.onSearchViaID('telegram_id', uid)
+
+    result, user = Module.onSearchViaID('telegram_id', uid)
+
+    if chat_type == 'private' or gid == tg_group:
         if result is False:
             callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
@@ -191,21 +216,20 @@ def myinvite(update: Update, context: CallbackContext) -> None:
                                  reply_markup=reply_markup)
         if chat_type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
-    except Exception as error:
-        logging.error(error)
 
 
 def buyplan(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    callback = None
-    try:
+    uid = update.message.from_user.id
+    gid = update.message.chat.id
+    chat_type = update.message.chat.type
+
+    if chat_type == 'private' or gid == tg_group:
         reply_markup = Command.onBuyPlan()
         callback = reply('📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址',
                          reply_markup=reply_markup)
-        if update.message.chat.type != 'private':
+        if chat_type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
-    except Exception as error:
-        logging.error(error)
 
 
 class Module():
@@ -374,6 +398,7 @@ def main() -> None:
     dispatcher = updater.dispatcher
 
     dispatcher.add_handler(CommandHandler("s", s, run_async=True))
+    dispatcher.add_handler(CommandHandler("ping", ping, run_async=True))
     dispatcher.add_handler(CommandHandler("bind", bind, run_async=True))
     dispatcher.add_handler(CommandHandler("unbind", unbind, run_async=True))
     dispatcher.add_handler(CommandHandler("mysub", mysub, run_async=True))
