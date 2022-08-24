@@ -49,10 +49,9 @@ db = pymysql.connect(host=v2_db_url,
                      database=v2_db_name,
                      port=v2_db_port)
 
-# Debugging
-
 
 def s(update: Update, context: CallbackContext) -> None:
+    # Debugging
     print(update)
 
 
@@ -73,10 +72,10 @@ def bind(update: Update, context: CallbackContext) -> None:
                 if len(context.args) == 2:
                     email = context.args[0]
                     password = context.args[1]
-                    if Command.onBind(email, password) is True:
+                    if Command.onBindLogin(email, password) is True:
                         if Module.onSearchViaMail(email) is False:
                             reply('✔️*成功*\n你已成功绑定账号了！')
-                            Module.onBind(uid, email)
+                            Command.onBindSuccess(uid, email)
                         else:
                             reply(
                                 '❌*错误*\n这个账号已绑定到别的Telegram了！')
@@ -101,33 +100,7 @@ def myinfo(update: Update, context: CallbackContext) -> None:
             callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
             if user['plan'] is not None:
-                text = '📋*个人信息*\n'
-                User_id = user['id']
-                Register_time = time.strftime(
-                    "%Y-%m-%d %H:%M:%S", time.localtime(user['register']))
-                Plan_id = Module.onSearchPlan(user['plan'])
-                Expire_time = '长期有效'
-                if user['expire'] is not None:
-                    Expire_time = time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.localtime(user['expire']))
-                Data_Upload = round(user['upload'] / 1024 / 1024 / 1024, 2)
-                Data_Download = round(user['download'] / 1024 / 1024 / 1024, 2)
-                Data_Total = round(user['total'] / 1024 / 1024 / 1024, 2)
-                Data_Last = round(
-                    (user['total']-user['download']-user['upload']) / 1024 / 1024 / 1024, 2)
-                Data_Time = time.strftime(
-                    "%Y-%m-%d %H:%M:%S", time.localtime(user['time']))
-
-                text = f'{text}\n🎲*UID：* {User_id}'
-                text = f'{text}\n⌚️*注册时间：* {Register_time}'
-                text = f'{text}\n📚*套餐名称：* {Plan_id}'
-                text = f'{text}\n📌*到期时间：* {Expire_time}'
-                text = f'{text}\n'
-                text = f'{text}\n📤*上传流量：* {Data_Upload} GB'
-                text = f'{text}\n📥*下载流量：* {Data_Download} GB'
-                text = f'{text}\n📃*剩余流量：* {Data_Last} GB'
-                text = f'{text}\n📜*总计流量：* {Data_Total} GB'
-                text = f'{text}\n📊*上次使用：* {Data_Time}'
+                text = Command.onMyInfo(user)
                 callback = reply(text)
             else:
                 callback = reply('❌*错误*\n你的账号没有购买过订阅！')
@@ -154,12 +127,8 @@ def mysub(update: Update, context: CallbackContext) -> None:
             if result is False:
                 reply('❌*错误*\n请先绑定账号后才进行操作！')
             else:
-                token = user['token']
-                header = '📚*订阅链接*\n\n🔮通用订阅地址为（点击即可复制）：\n'
-                tolink = f'`{v2_url}/api/v1/client/subscribe?token={token}`'
-                buttom = '\n\n⚠️*如果订阅链接泄露请前往官网重置！*'
-                reply(
-                    f'{header}{tolink}{buttom}')
+                text, reply_markup = Command.onMySub(user['token'])
+                reply(text)
 
     except Exception as error:
         logging.error(error)
@@ -169,7 +138,7 @@ def buyplan(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     callback = None
     try:
-        reply_markup = Module.onBuyPlan()
+        reply_markup = Command.onBuyPlan()
         callback = reply('📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址',
                          reply_markup=reply_markup)
         if update.message.chat.type != 'private':
@@ -230,12 +199,6 @@ class Module():
             result = cursor.fetchone()
             return result[0]
 
-    def onBind(uid, email):
-        with db.cursor() as cursor:
-            cursor.execute(
-                "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
-            db.commit()
-
     def getAllPlan():
         # return planID & Name (Only enable plan)
         with db.cursor() as cursor:
@@ -243,7 +206,26 @@ class Module():
                 "SELECT id,name FROM v2_plan WHERE `show` = 1")
             result = cursor.fetchall()
             return result
-        # {v2_url}/#/plan/1
+
+
+class Command():
+    def onBindLogin(email, password):
+        login = {
+            "email": email,
+            "password": password
+        }
+        x = requests.post(
+            f'{v2_url}/api/v1/passport/auth/login', login)
+        if x.status_code == 200:
+            return True
+        else:
+            return False
+    def onBindSuccess(uid, email):
+        # args uid,email
+        with db.cursor() as cursor:
+            cursor.execute(
+                "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
+            db.commit()
 
     def onBuyPlan():
         plan = Module.getAllPlan()
@@ -255,19 +237,45 @@ class Module():
         reply_markup = InlineKeyboardMarkup(keyboard)
         return reply_markup
 
+    def onMyInfo(user):
+        text = '📋*个人信息*\n'
+        User_id = user['id']
+        Register_time = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(user['register']))
+        Plan_id = Module.onSearchPlan(user['plan'])
+        Expire_time = '长期有效'
+        if user['expire'] is not None:
+            Expire_time = time.strftime(
+                "%Y-%m-%d %H:%M:%S", time.localtime(user['expire']))
+        Data_Upload = round(user['upload'] / 1024 / 1024 / 1024, 2)
+        Data_Download = round(user['download'] / 1024 / 1024 / 1024, 2)
+        Data_Total = round(user['total'] / 1024 / 1024 / 1024, 2)
+        Data_Last = round(
+            (user['total']-user['download']-user['upload']) / 1024 / 1024 / 1024, 2)
+        Data_Time = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(user['time']))
 
-class Command():
-    def onBind(email, password):
-        login = {
-            "email": email,
-            "password": password
-        }
-        x = requests.post(
-            f'{v2_url}/api/v1/passport/auth/login', login)
-        if x.status_code == 200:
-            return True
-        else:
-            return False
+        text = f'{text}\n🎲*UID：* {User_id}'
+        text = f'{text}\n⌚️*注册时间：* {Register_time}'
+        text = f'{text}\n📚*套餐名称：* {Plan_id}'
+        text = f'{text}\n📌*到期时间：* {Expire_time}'
+        text = f'{text}\n'
+        text = f'{text}\n📤*上传流量：* {Data_Upload} GB'
+        text = f'{text}\n📥*下载流量：* {Data_Download} GB'
+        text = f'{text}\n📃*剩余流量：* {Data_Last} GB'
+        text = f'{text}\n📜*总计流量：* {Data_Total} GB'
+        text = f'{text}\n📊*上次使用：* {Data_Time}'
+        return text
+
+    def onMySub(token):
+        header = '📚*订阅链接*\n\n🔮通用订阅地址为（点击即可复制）：\n'
+        tolink = f'`{v2_url}/api/v1/client/subscribe?token={token}`'
+        buttom = '\n\n⚠️*如果订阅链接泄露请前往官网重置！*'
+        keyboard = []
+        text = f'{header}{tolink}{buttom}'
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        return text, reply_markup
 
 
 def main() -> None:
