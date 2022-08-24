@@ -6,7 +6,7 @@ import pymysql
 import time
 from sshtunnel import SSHTunnelForwarder
 
-from telegram import Update, Bot,InlineKeyboardMarkup,InlineKeyboardButton
+from telegram import Update, Bot, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Updater, CommandHandler, CallbackContext, Filters
 
 # Telegram Bot Token
@@ -50,6 +50,8 @@ db = pymysql.connect(host=v2_db_url,
                      port=v2_db_port)
 
 # Debugging
+
+
 def s(update: Update, context: CallbackContext) -> None:
     print(update)
 
@@ -57,39 +59,33 @@ def s(update: Update, context: CallbackContext) -> None:
 def bind(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
+    chat_type = update.message.chat.type
     try:
-        if Module.onSearchViaTG(uid) is False:
-            if len(context.args) == 2:
-                email = context.args[0]
-                password = context.args[1]
-                if Command.onBind(email,password) is True:
-                    if Module.onSearchViaMail(email) is False:
-                        reply('✔️*成功*\n你已成功绑定账号了！')
-                        Module.onBind(uid,email)
-                    else:
-                        reply(
-                            '❌*错误*\n这个账号已绑定到别的Telegram了！')
-                else:
-                    reply('❌*错误*\n邮箱或密码错误了！')
+        result = Module.onSearchViaTG(uid)
+        if update.message.chat.type != 'private':
+            if result is False:
+                callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
             else:
-                reply('❌*错误*\n正确的格式为：/bind 邮箱 密码')
+                callback = reply('❌*错误*\n你已经绑定过账号了！')
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
         else:
-            reply('❌*错误*\n你已经绑定过账号了！')
-    except Exception as error:
-        logging.error(error)
-
-
-def bindingroup(update: Update, context: CallbackContext) -> None:
-    reply = update.message.reply_markdown
-    uid = update.message.from_user.id
-    callback = None
-    try:
-        result, user = Module.onSearchViaTG(uid)
-        if result is False:
-            callback = reply('❌*错误*\n为了你的账号安全，请私聊我来绑定')
-        else:
-            callback = reply('❌*错误*\n你已经绑定过账号了！')
-        Module.autoDelete(update, callback.chat.id, callback.message_id)
+            if result is False:
+                if len(context.args) == 2:
+                    email = context.args[0]
+                    password = context.args[1]
+                    if Command.onBind(email, password) is True:
+                        if Module.onSearchViaMail(email) is False:
+                            reply('✔️*成功*\n你已成功绑定账号了！')
+                            Module.onBind(uid, email)
+                        else:
+                            reply(
+                                '❌*错误*\n这个账号已绑定到别的Telegram了！')
+                    else:
+                        reply('❌*错误*\n邮箱或密码错误了！')
+                else:
+                    reply('❌*错误*\n正确的格式为：/bind 邮箱 密码')
+            else:
+                reply('❌*错误*\n你已经绑定过账号了！')
     except Exception as error:
         logging.error(error)
 
@@ -97,6 +93,7 @@ def bindingroup(update: Update, context: CallbackContext) -> None:
 def myinfo(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
+    chat_type = update.message.chat.type
     callback = None
     try:
         result, user = Module.onSearchViaTG(uid)
@@ -109,8 +106,10 @@ def myinfo(update: Update, context: CallbackContext) -> None:
                 Register_time = time.strftime(
                     "%Y-%m-%d %H:%M:%S", time.localtime(user['register']))
                 Plan_id = Module.onSearchPlan(user['plan'])
-                Expire_time = time.strftime(
-                    "%Y-%m-%d %H:%M:%S", time.localtime(user['expire']))
+                Expire_time = '长期有效'
+                if user['expire'] is not None:
+                    Expire_time = time.strftime(
+                        "%Y-%m-%d %H:%M:%S", time.localtime(user['expire']))
                 Data_Upload = round(user['upload'] / 1024 / 1024 / 1024, 2)
                 Data_Download = round(user['download'] / 1024 / 1024 / 1024, 2)
                 Data_Total = round(user['total'] / 1024 / 1024 / 1024, 2)
@@ -121,7 +120,7 @@ def myinfo(update: Update, context: CallbackContext) -> None:
 
                 text = f'{text}\n🎲*UID：* {User_id}'
                 text = f'{text}\n⌚️*注册时间：* {Register_time}'
-                text = f'{text}\n📚*套餐类型：* {Plan_id}'
+                text = f'{text}\n📚*套餐名称：* {Plan_id}'
                 text = f'{text}\n📌*到期时间：* {Expire_time}'
                 text = f'{text}\n'
                 text = f'{text}\n📤*上传流量：* {Data_Upload} GB'
@@ -132,19 +131,47 @@ def myinfo(update: Update, context: CallbackContext) -> None:
                 callback = reply(text)
             else:
                 callback = reply('❌*错误*\n你的账号没有购买过订阅！')
-        if update.message.chat.type != 'private':
+        if chat_type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
+    except Exception as error:
+        logging.error(error)
+
+
+def mysub(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    uid = update.message.from_user.id
+    chat_type = update.message.chat.type
+    callback = None
+    try:
+        result, user = Module.onSearchViaTG(uid)
+        if chat_type != 'private':
+            if result is False:
+                callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
+            else:
+                callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
+        else:
+            if result is False:
+                reply('❌*错误*\n请先绑定账号后才进行操作！')
+            else:
+                token = user['token']
+                header = '📚*订阅链接*\n\n🔮通用订阅地址为（点击即可复制）：\n'
+                tolink = f'`{v2_url}/api/v1/client/subscribe?token={token}`'
+                buttom = '\n\n⚠️*如果订阅链接泄露请前往官网重置！*'
+                reply(
+                    f'{header}{tolink}{buttom}')
+
     except Exception as error:
         logging.error(error)
 
 
 def buyplan(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    uid = update.message.from_user.id
     callback = None
     try:
         reply_markup = Module.onBuyPlan()
-        callback = reply('📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址',reply_markup=reply_markup)
+        callback = reply('📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址',
+                         reply_markup=reply_markup)
         if update.message.chat.type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
     except Exception as error:
@@ -158,8 +185,8 @@ class Module():
         update.message.delete()
 
     def onSearchViaTG(uid):
-        #args TelegramID
-        #return boolean, userdata as dict
+        # args TelegramID
+        # return boolean, userdata as dict
         with db.cursor() as cursor:
             cursor.execute(f"SELECT * FROM v2_user WHERE telegram_id = {uid}")
             result = cursor.fetchone()
@@ -168,53 +195,54 @@ class Module():
                 return False, user
             else:
                 user = {
-                'id': result[0],
-                'tg': result[2],
-                'email': result[3],
-                'money': result[7],
-                'time': result[12],
-                'upload': result[13],
-                'download': result[14],
-                'total': result[15],
-                'plan': result[23],
-                'expire': result[28],
-                'register': result[29]}
+                    'id': result[0],
+                    'tg': result[2],
+                    'email': result[3],
+                    'money': result[7],
+                    'time': result[12],
+                    'upload': result[13],
+                    'download': result[14],
+                    'total': result[15],
+                    'plan': result[23],
+                    'token': result[26],
+                    'expire': result[28],
+                    'register': result[29]}
                 return True, user
 
     def onSearchViaMail(email):
-        #args email
-        #return boolean, TelegramID
+        # args email
+        # return boolean, TelegramID
         with db.cursor() as cursor:
             cursor.execute(
-            "SELECT telegram_id FROM v2_user WHERE email = %s", (email))
+                "SELECT telegram_id FROM v2_user WHERE email = %s", (email))
             result = cursor.fetchone()
             if result[0] is None:
-                return False,0
+                return False, 0
             else:
                 return True, result[0]
 
     def onSearchPlan(planid):
-        #args planid
-        #return planname
+        # args planid
+        # return planname
         with db.cursor() as cursor:
             cursor.execute(
-            "SELECT name FROM v2_plan WHERE id = %s", (planid))
+                "SELECT name FROM v2_plan WHERE id = %s", (planid))
             result = cursor.fetchone()
             return result[0]
 
-    def onBind(uid,email):
+    def onBind(uid, email):
         with db.cursor() as cursor:
             cursor.execute(
                 "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
-        db.commit()
+            db.commit()
 
     def getAllPlan():
-        #return planID & Name (Only enable plan)
+        # return planID & Name (Only enable plan)
         with db.cursor() as cursor:
             cursor.execute(
-            "SELECT id,name FROM v2_plan WHERE `show` = 1")
-        result = cursor.fetchall()
-        return result
+                "SELECT id,name FROM v2_plan WHERE `show` = 1")
+            result = cursor.fetchall()
+            return result
         # {v2_url}/#/plan/1
 
     def onBuyPlan():
@@ -222,15 +250,14 @@ class Module():
         keyboard = []
         url = f'{v2_url}/#/plan/'
         for i in plan:
-            keyboard.append([InlineKeyboardButton(text=f'购买 {i[1]}', url=f"{url}{i[0]}")])
+            keyboard.append([InlineKeyboardButton(
+                text=f'购买 {i[1]}', url=f"{url}{i[0]}")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         return reply_markup
-        
-
 
 
 class Command():
-    def onBind(email,password):
+    def onBind(email, password):
         login = {
             "email": email,
             "password": password
@@ -247,12 +274,10 @@ def main() -> None:
     updater = Updater(bot_token)
 
     dispatcher = updater.dispatcher
-    
+
     dispatcher.add_handler(CommandHandler("s", s, run_async=True))
-    dispatcher.add_handler(CommandHandler(
-        "bind", bind, filters=Filters.chat_type.private, run_async=True))
-    dispatcher.add_handler(CommandHandler(
-        "bind", bindingroup, filters=Filters.chat_type.groups, run_async=True))
+    dispatcher.add_handler(CommandHandler("bind", bind, run_async=True))
+    dispatcher.add_handler(CommandHandler("mysub", mysub, run_async=True))
     dispatcher.add_handler(CommandHandler("myinfo", myinfo, run_async=True))
     dispatcher.add_handler(CommandHandler("buyplan", buyplan, run_async=True))
 
