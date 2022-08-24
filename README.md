@@ -1,19 +1,22 @@
 # V2Board Telegram Bot via Python
 
 一个简单的项目，让 V2Board Telegram Bot 支持更丰富的功能。
+
 Python 版本需求 >= 3.8
 
 ## 现有功能
 - 基于MySQl，支持以SSH方式登录
 - 自动删除群聊中信息
-- 支持Bot内绑定
-- 支持获取用户信息、订阅
+- 支持Bot内绑定、解绑
+- 支持获取用户信息、订阅、邀请
 - 支持获取套餐并生成购买按钮
 
 ## 现有指令
 - 账号绑定（/bind） - 仅限私聊
+- 账号解绑（/unbind） - 仅限私聊
 - 订阅链接（/mysub） - 仅限私聊
 - 订阅信息（/myinfo）
+- 邀请信息（/myinvite）
 - 套餐购买（/buyplan)
 
 ## 如何使用

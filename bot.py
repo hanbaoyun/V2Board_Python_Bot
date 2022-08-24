@@ -47,7 +47,8 @@ db = pymysql.connect(host=v2_db_url,
                      user=v2_db_user,
                      password=v2_db_pass,
                      database=v2_db_name,
-                     port=v2_db_port)
+                     port=v2_db_port,
+                     autocommit=True)
 
 
 def s(update: Update, context: CallbackContext) -> None:
@@ -60,8 +61,8 @@ def bind(update: Update, context: CallbackContext) -> None:
     uid = update.message.from_user.id
     chat_type = update.message.chat.type
     try:
-        result = Module.onSearchViaTG(uid)
-        if update.message.chat.type != 'private':
+        result, user = Module.onSearchViaID('telegram_id', uid)
+        if chat_type != 'private':
             if result is False:
                 callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
             else:
@@ -72,13 +73,13 @@ def bind(update: Update, context: CallbackContext) -> None:
                 if len(context.args) == 2:
                     email = context.args[0]
                     password = context.args[1]
-                    if Command.onBindLogin(email, password) is True:
-                        if Module.onSearchViaMail(email) is False:
-                            reply('✔️*成功*\n你已成功绑定账号了！')
-                            Command.onBindSuccess(uid, email)
+                    if Module.onLogin(email, password) is True:
+                        result, tig = Module.onSearchViaMail(email)
+                        if result is False:
+                            reply('✔️*成功*\n你已成功绑定 Telegram 了！')
+                            Command.onBind(uid, email)
                         else:
-                            reply(
-                                '❌*错误*\n这个账号已绑定到别的Telegram了！')
+                            reply('❌*错误*\n这个账号已绑定到别的 Telegram 了！')
                     else:
                         reply('❌*错误*\n邮箱或密码错误了！')
                 else:
@@ -89,13 +90,47 @@ def bind(update: Update, context: CallbackContext) -> None:
         logging.error(error)
 
 
+def unbind(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    uid = update.message.from_user.id
+    chat_type = update.message.chat.type
+    try:
+        result, user = Module.onSearchViaID('telegram_id', uid)
+        if chat_type != 'private':
+            if result is False:
+                callback = reply('❌*错误*\n你还没有绑定过账号！')
+            else:
+                callback = reply('❌*错误*\n为了你的账号安全，请私聊我！')
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
+        else:
+            if result is False:
+                callback = reply('❌*错误*\n你还没有绑定过账号！')
+            else:
+                if len(context.args) == 2:
+                    email = context.args[0]
+                    password = context.args[1]
+                    if Module.onLogin(email, password) is True:
+                        result, tid = Module.onSearchViaMail(email)
+                        if tid == uid:
+                            reply('✔️*成功*\n你已成功解绑 Telegram 了！')
+                            Command.onUnBind(email)
+                        else:
+                            reply('❌*错误*\n这个账号与绑定的 Telegram 不匹配！')
+                    else:
+                        reply('❌*错误*\n邮箱或密码错误了！')
+                else:
+                    reply('❌*错误*\n正确的格式为：/unbind 邮箱 密码')
+    except Exception as error:
+        logging.error(error)
+
+
 def myinfo(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
     chat_type = update.message.chat.type
     callback = None
     try:
-        result, user = Module.onSearchViaTG(uid)
+        result, user = Module.onSearchViaID('telegram_id', uid)
         if result is False:
             callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
@@ -116,7 +151,7 @@ def mysub(update: Update, context: CallbackContext) -> None:
     chat_type = update.message.chat.type
     callback = None
     try:
-        result, user = Module.onSearchViaTG(uid)
+        result, user = Module.onSearchViaID('telegram_id', uid)
         if chat_type != 'private':
             if result is False:
                 callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
@@ -130,6 +165,32 @@ def mysub(update: Update, context: CallbackContext) -> None:
                 text, reply_markup = Command.onMySub(user['token'])
                 reply(text)
 
+    except Exception as error:
+        logging.error(error)
+
+
+def myinvite(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    uid = update.message.from_user.id
+    chat_type = update.message.chat.type
+    callback = None
+    try:
+        result, user = Module.onSearchViaID('telegram_id', uid)
+        if result is False:
+            callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
+        else:
+            invite_code = Module.onSearchInvite(user['id'])
+            if invite_code is not None:
+                text = Command.onMyInvite(invite_code)
+                callback = reply(text)
+            else:
+                keyboard = [[InlineKeyboardButton(
+                    text=f'点击打开网站', url=f"{v2_url}/#/invite")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                callback = reply('❌*错误*\n你还没有生成过邀请码，点击前往网站生成一个吧！',
+                                 reply_markup=reply_markup)
+        if chat_type != 'private':
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
     except Exception as error:
         logging.error(error)
 
@@ -153,12 +214,25 @@ class Module():
         bot.deleteMessage(chat_id=chatid, message_id=messageid)
         update.message.delete()
 
-    def onSearchViaTG(uid):
-        # args TelegramID
+    def onLogin(email, password):
+        login = {
+            "email": email,
+            "password": password
+        }
+        x = requests.post(
+            f'{v2_url}/api/v1/passport/auth/login', login)
+        if x.status_code == 200:
+            return True
+        else:
+            return False
+
+    def onSearchViaID(t, id):
+        # args t = id or telegram_id
         # return boolean, userdata as dict
         with db.cursor() as cursor:
-            cursor.execute(f"SELECT * FROM v2_user WHERE telegram_id = {uid}")
+            cursor.execute(f"SELECT * FROM v2_user WHERE `{t}` = {id}")
             result = cursor.fetchone()
+            print(result)
             if result is None:
                 user = {}
                 return False, user
@@ -185,6 +259,7 @@ class Module():
             cursor.execute(
                 "SELECT telegram_id FROM v2_user WHERE email = %s", (email))
             result = cursor.fetchone()
+            print(result)
             if result[0] is None:
                 return False, 0
             else:
@@ -197,7 +272,18 @@ class Module():
             cursor.execute(
                 "SELECT name FROM v2_plan WHERE id = %s", (planid))
             result = cursor.fetchone()
+            print(result)
             return result[0]
+
+    def onSearchInvite(id):
+        # args user id
+        # return code,status,pv
+        with db.cursor() as cursor:
+            cursor.execute(
+                "SELECT code,status,pv FROM v2_invite_code WHERE user_id = %s", (id))
+            result = cursor.fetchone()
+            print(result)
+            return result
 
     def getAllPlan():
         # return planID & Name (Only enable plan)
@@ -205,27 +291,22 @@ class Module():
             cursor.execute(
                 "SELECT id,name FROM v2_plan WHERE `show` = 1")
             result = cursor.fetchall()
+            print(result)
             return result
 
 
 class Command():
-    def onBindLogin(email, password):
-        login = {
-            "email": email,
-            "password": password
-        }
-        x = requests.post(
-            f'{v2_url}/api/v1/passport/auth/login', login)
-        if x.status_code == 200:
-            return True
-        else:
-            return False
-    def onBindSuccess(uid, email):
+    def onBind(uid, email):
         # args uid,email
         with db.cursor() as cursor:
             cursor.execute(
                 "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
-            db.commit()
+
+    def onUnBind(email):
+        # args email
+        with db.cursor() as cursor:
+            cursor.execute(
+                "UPDATE v2_user SET telegram_id = NULL WHERE email = %s", (email))
 
     def onBuyPlan():
         plan = Module.getAllPlan()
@@ -277,6 +358,15 @@ class Command():
 
         return text, reply_markup
 
+    def onMyInvite(invite_code):
+        code, status, pv = invite_code[0], invite_code[1], invite_code[2]
+        header = '📚*邀请信息*\n\n🔮邀请地址为（点击即可复制）：\n'
+        tolink = f'`{v2_url}/#/register?code={code}`'
+        buttom = f'\n\n⚙️*状态：* {status}\n👪*人数：* {pv}'
+        text = f'{header}{tolink}{buttom}'
+
+        return text
+
 
 def main() -> None:
     updater = Updater(bot_token)
@@ -285,8 +375,11 @@ def main() -> None:
 
     dispatcher.add_handler(CommandHandler("s", s, run_async=True))
     dispatcher.add_handler(CommandHandler("bind", bind, run_async=True))
+    dispatcher.add_handler(CommandHandler("unbind", unbind, run_async=True))
     dispatcher.add_handler(CommandHandler("mysub", mysub, run_async=True))
     dispatcher.add_handler(CommandHandler("myinfo", myinfo, run_async=True))
+    dispatcher.add_handler(CommandHandler(
+        "myinvite", myinvite, run_async=True))
     dispatcher.add_handler(CommandHandler("buyplan", buyplan, run_async=True))
 
     updater.start_polling()
