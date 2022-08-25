@@ -15,7 +15,7 @@ bot_token = ''
 tg_admin = 0
 tg_group = 0
 # V2Board Infomation
-v2_url = 'https://awesomeV2Board.com' # without '/' symbol
+v2_url = 'https://awesomeV2Board.com'  # without '/' symbol
 # V2Board MySQL Database
 v2_db_url = '127.0.0.1'
 v2_db_user = 'root'
@@ -113,6 +113,7 @@ def bind(update: Update, context: CallbackContext) -> None:
                 callback = reply('❌*错误*\n你已经绑定过账号了！')
             Module.autoDelete(update, callback.chat.id, callback.message_id)
 
+
 def unbind(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
     uid = update.message.from_user.id
@@ -178,7 +179,7 @@ def myinfo(update: Update, context: CallbackContext) -> None:
     chat_type = update.message.chat.type
 
     result, user = Module.onSearchViaID('telegram_id', uid)
-    
+
     if chat_type == 'private' or gid == tg_group:
         if result is False:
             callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
@@ -227,6 +228,20 @@ def buyplan(update: Update, context: CallbackContext) -> None:
     if chat_type == 'private' or gid == tg_group:
         reply_markup = Command.onBuyPlan()
         callback = reply('📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址',
+                         reply_markup=reply_markup)
+        if chat_type != 'private':
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
+
+
+def website(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    uid = update.message.from_user.id
+    gid = update.message.chat.id
+    chat_type = update.message.chat.type
+
+    if chat_type == 'private' or gid == tg_group:
+        reply_markup = Command.onWebsite()
+        callback = reply('🗺*前往网站*\n\n🌐点击下方按钮来前往网站地址',
                          reply_markup=reply_markup)
         if chat_type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
@@ -349,6 +364,11 @@ class Command():
         reply_markup = InlineKeyboardMarkup(keyboard)
         return reply_markup
 
+    def onWebsite():
+        keyboard = [[InlineKeyboardButton(text='打开网站', url=f"{v2_url}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        return reply_markup
+
     def onMyInfo(user):
         text = '📋*个人信息*\n'
         User_id = user['id']
@@ -413,6 +433,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler(
         "myinvite", myinvite, run_async=True))
     dispatcher.add_handler(CommandHandler("buyplan", buyplan, run_async=True))
+    dispatcher.add_handler(CommandHandler("website", website, run_async=True))
 
     updater.start_polling()
     updater.idle()
