@@ -253,6 +253,7 @@ class Module():
     def onSearchViaID(t, id):
         # args t = id or telegram_id
         # return boolean, userdata as dict
+        db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(f"SELECT * FROM v2_user WHERE `{t}` = {id}")
             result = cursor.fetchone()
@@ -279,6 +280,7 @@ class Module():
     def onSearchViaMail(email):
         # args email
         # return boolean, TelegramID
+        db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
                 "SELECT telegram_id FROM v2_user WHERE email = %s", (email))
@@ -292,6 +294,7 @@ class Module():
     def onSearchPlan(planid):
         # args planid
         # return planname
+        db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
                 "SELECT name FROM v2_plan WHERE id = %s", (planid))
@@ -302,6 +305,7 @@ class Module():
     def onSearchInvite(id):
         # args user id
         # return code,status,pv
+        db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
                 "SELECT code,status,pv FROM v2_invite_code WHERE user_id = %s", (id))
@@ -311,6 +315,7 @@ class Module():
 
     def getAllPlan():
         # return planID & Name (Only enable plan)
+        db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
                 "SELECT id,name FROM v2_plan WHERE `show` = 1")
@@ -322,12 +327,14 @@ class Module():
 class Command():
     def onBind(uid, email):
         # args uid,email
+        db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
                 "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
 
     def onUnBind(email):
         # args email
+        db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
                 "UPDATE v2_user SET telegram_id = NULL WHERE email = %s", (email))
