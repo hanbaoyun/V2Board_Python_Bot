@@ -21,12 +21,13 @@ logger = logging.getLogger(__name__)
 bot = Bot(Config.bot_token)
 
 # Enable ssh
+v2_db_port = Config.v2_db_port
 if Config.ssh_enable is True:
     ssh = SSHTunnelForwarder(
         ssh_address_or_host=(Config.ssh_ip, Config.ssh_port),
         ssh_username=Config.ssh_user,
         ssh_password=Config.ssh_pass,
-        remote_bind_address=(Config.v2_db_url, Config.v2_db_port))
+        remote_bind_address=(Config.v2_db_url, v2_db_port))
     ssh.start()
     v2_db_port = ssh.local_bind_port
 # Database Connection
