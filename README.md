@@ -32,12 +32,13 @@ git clone https://github.com/DyAxy/V2Board_Python_Bot.git
 cd V2Board_Python_Bot
 # 你需要安装好 pip3 的包管理
 pip3 install -r requirements.txt
-nano bot.py
-# 编辑 line 13 为你的Bot Token
-# 编辑 line 15 为你的V2Board地址，最后请不要加 / 符号
-# 编辑 line 17~21 为你的MySQL连接信息
-# 编辑 line 23 如果你需要SSH连接数据库 则为True
-# 编辑 line 24~27 为你的SSH连接信息
+nano Config.py
+# 编辑 line 2 为你的Bot Token
+# 编辑 line 4、5 为你的ID和群ID，通过 /ping 获取
+# 编辑 line 7 为你的V2Board地址，最后请不要加 / 符号
+# 编辑 line 9~13 为你的MySQL连接信息
+# 编辑 line 15 如果你需要SSH连接数据库 则为True
+# 编辑 line 16~19 为你的SSH连接信息
 python3 bot.py
 ```
 
