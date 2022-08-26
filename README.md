@@ -32,6 +32,7 @@ git clone https://github.com/DyAxy/V2Board_Python_Bot.git
 cd V2Board_Python_Bot
 # 你需要安装好 pip3 的包管理
 pip3 install -r requirements.txt
+cp Config.py.example Config.py
 nano Config.py
 # 编辑 line 2 为你的Bot Token
 # 编辑 line 4、5 为你的ID和群ID，通过 /ping 获取
