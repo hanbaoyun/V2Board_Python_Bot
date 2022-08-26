@@ -4,6 +4,8 @@ import logging
 import requests
 import pymysql
 import time
+import pytz
+import datetime
 from sshtunnel import SSHTunnelForwarder
 
 from telegram import Update, Bot, InlineKeyboardMarkup, InlineKeyboardButton
@@ -15,7 +17,7 @@ bot_token = ''
 tg_admin = 0
 tg_group = 0
 # V2Board Infomation
-v2_url = 'https://awesomeV2Board.com'  # without '/' symbol
+v2_url = 'https://awesomeV2Board.com' # without '/' symbol
 # V2Board MySQL Database
 v2_db_url = '127.0.0.1'
 v2_db_user = 'root'
@@ -52,6 +54,8 @@ db = pymysql.connect(host=v2_db_url,
                      database=v2_db_name,
                      port=v2_db_port,
                      autocommit=True)
+# TineZone
+tz = pytz.timezone('Asia/Shanghai')
 
 
 def s(update: Update, context: CallbackContext) -> None:
@@ -61,19 +65,19 @@ def s(update: Update, context: CallbackContext) -> None:
 
 def ping(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    uid = update.message.from_user.id
+    tid = update.message.from_user.id
     gid = update.message.chat.id
     chat_type = update.message.chat.type
 
     text = '💥*嘭*\n'
-    uuid = f'{text}\n你的ID为：`{uid}`'
+    utid = f'{text}\n你的ID为：`{tid}`'
 
     if chat_type == 'private':
-        reply(uuid)
-    elif gid == tg_group:
+        reply(utid)
+    else:
         group = f'\n群组ID为：`{gid}`'
         if update.message.from_user.is_bot is False:
-            callback = reply(f'{uuid}{group}')
+            callback = reply(f'{utid}{group}')
         else:
             callback = reply(f'{text}{group}')
         Module.autoDelete(update, callback.chat.id, callback.message_id)
@@ -81,11 +85,11 @@ def ping(update: Update, context: CallbackContext) -> None:
 
 def bind(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    uid = update.message.from_user.id
+    tid = update.message.from_user.id
     gid = update.message.chat.id
     chat_type = update.message.chat.type
 
-    result, user = Module.onSearchViaID('telegram_id', uid)
+    result, user = Module.getUser('telegram_id', tid)
 
     if chat_type == 'private':
         if result is False:
@@ -93,10 +97,10 @@ def bind(update: Update, context: CallbackContext) -> None:
                 email = context.args[0]
                 password = context.args[1]
                 if Module.onLogin(email, password) is True:
-                    result, tig = Module.onSearchViaMail(email)
+                    result, tig = Module.getTGbyMail(email)
                     if result is False:
                         reply('✔️*成功*\n你已成功绑定 Telegram 了！')
-                        Command.onBind(uid, email)
+                        Command.onBind(tid, email)
                     else:
                         reply('❌*错误*\n这个账号已绑定到别的 Telegram 了！')
                 else:
@@ -116,11 +120,11 @@ def bind(update: Update, context: CallbackContext) -> None:
 
 def unbind(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    uid = update.message.from_user.id
+    tid = update.message.from_user.id
     gid = update.message.chat.id
     chat_type = update.message.chat.type
 
-    result, user = Module.onSearchViaID('telegram_id', uid)
+    result, user = Module.getUser('telegram_id', tid)
 
     if chat_type == 'private':
         if result is False:
@@ -130,8 +134,8 @@ def unbind(update: Update, context: CallbackContext) -> None:
                 email = context.args[0]
                 password = context.args[1]
                 if Module.onLogin(email, password) is True:
-                    result, tid = Module.onSearchViaMail(email)
-                    if tid == uid:
+                    result, id = Module.getTGbyMail(email)
+                    if id == tid:
                         reply('✔️*成功*\n你已成功解绑 Telegram 了！')
                         Command.onUnBind(email)
                     else:
@@ -151,16 +155,17 @@ def unbind(update: Update, context: CallbackContext) -> None:
 
 def mysub(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    uid = update.message.from_user.id
+    tid = update.message.from_user.id
     gid = update.message.chat.id
     chat_type = update.message.chat.type
 
-    result, user = Module.onSearchViaID('telegram_id', uid)
+    result, user = Module.getUser('telegram_id', tid)
 
     if chat_type == 'private':
         if result is False:
             reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
+            # 根据客户端
             text, reply_markup = Command.onMySub(user['token'])
             reply(text)
     else:
@@ -174,11 +179,11 @@ def mysub(update: Update, context: CallbackContext) -> None:
 
 def myinfo(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    uid = update.message.from_user.id
+    tid = update.message.from_user.id
     gid = update.message.chat.id
     chat_type = update.message.chat.type
 
-    result, user = Module.onSearchViaID('telegram_id', uid)
+    result, user = Module.getUser('telegram_id', tid)
 
     if chat_type == 'private' or gid == tg_group:
         if result is False:
@@ -193,21 +198,43 @@ def myinfo(update: Update, context: CallbackContext) -> None:
             Module.autoDelete(update, callback.chat.id, callback.message_id)
 
 
-def myinvite(update: Update, context: CallbackContext) -> None:
+def myusage(update: Update, context: CallbackContext) -> None:
     reply = update.message.reply_markdown
-    uid = update.message.from_user.id
+    tid = update.message.from_user.id
     gid = update.message.chat.id
     chat_type = update.message.chat.type
 
-    result, user = Module.onSearchViaID('telegram_id', uid)
+    result, user = Module.getUser('telegram_id', tid)
+    if chat_type == 'private' or gid == tg_group:
+        if result is False:
+            callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
+        else:
+            result, statlist = Module.getUserStat(user['uid'])
+            if result is True:
+                text, reply_markup = Command.onMyUsage(statlist)
+                callback = reply(text, reply_markup=reply_markup)
+            else:
+                callback = reply('❌*错误*\n你还没有消耗过流量！')
+        if chat_type != 'private':
+            Module.autoDelete(update, callback.chat.id, callback.message_id)
+
+
+def myinvite(update: Update, context: CallbackContext) -> None:
+    reply = update.message.reply_markdown
+    tid = update.message.from_user.id
+    gid = update.message.chat.id
+    chat_type = update.message.chat.type
+
+    result, user = Module.getUser('telegram_id', tid)
 
     if chat_type == 'private' or gid == tg_group:
         if result is False:
             callback = reply('❌*错误*\n请先绑定账号后才进行操作！')
         else:
-            invite_code = Module.onSearchInvite(user['id'])
+            invite_code = Module.getInviteCode(user['id'])
             if invite_code is not None:
-                text = Command.onMyInvite(invite_code)
+                invite_times = Module.getInviteTimes(user['id'])
+                text = Command.onMyInvite(invite_code, invite_times)
                 callback = reply(text)
             else:
                 keyboard = [[InlineKeyboardButton(
@@ -226,9 +253,8 @@ def buyplan(update: Update, context: CallbackContext) -> None:
     chat_type = update.message.chat.type
 
     if chat_type == 'private' or gid == tg_group:
-        reply_markup = Command.onBuyPlan()
-        callback = reply('📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址',
-                         reply_markup=reply_markup)
+        text, reply_markup = Command.onBuyPlan()
+        callback = reply(text, reply_markup=reply_markup)
         if chat_type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
 
@@ -240,14 +266,13 @@ def website(update: Update, context: CallbackContext) -> None:
     chat_type = update.message.chat.type
 
     if chat_type == 'private' or gid == tg_group:
-        reply_markup = Command.onWebsite()
-        callback = reply('🗺*前往网站*\n\n🌐点击下方按钮来前往网站地址',
-                         reply_markup=reply_markup)
+        text, reply_markup = Command.onWebsite()
+        callback = reply(text, reply_markup=reply_markup)
         if chat_type != 'private':
             Module.autoDelete(update, callback.chat.id, callback.message_id)
 
 
-class Module():
+class Module:
     def autoDelete(update, chatid, messageid):
         time.sleep(30)
         bot.deleteMessage(chat_id=chatid, message_id=messageid)
@@ -265,20 +290,19 @@ class Module():
         else:
             return False
 
-    def onSearchViaID(t, id):
+    def getUser(t, id):
         # args t = id or telegram_id
         # return boolean, userdata as dict
         db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(f"SELECT * FROM v2_user WHERE `{t}` = {id}")
             result = cursor.fetchone()
-            print(result)
             if result is None:
                 user = {}
                 return False, user
             else:
                 user = {
-                    'id': result[0],
+                    'uid': result[0],
                     'tg': result[2],
                     'email': result[3],
                     'money': result[7],
@@ -292,7 +316,19 @@ class Module():
                     'register': result[29]}
                 return True, user
 
-    def onSearchViaMail(email):
+    def getUserStat(uid):
+        db.ping(reconnect=True)
+        with db.cursor() as cursor:
+            cursor.execute(
+                f"SELECT * FROM v2_stat_user WHERE `user_id` = {uid}")
+            result = cursor.fetchall()
+            print(result)
+            if len(result) < 1:
+                return False, result
+            else:
+                return True, result
+
+    def getTGbyMail(email):
         # args email
         # return boolean, TelegramID
         db.ping(reconnect=True)
@@ -300,13 +336,12 @@ class Module():
             cursor.execute(
                 "SELECT telegram_id FROM v2_user WHERE email = %s", (email))
             result = cursor.fetchone()
-            print(result)
             if result[0] is None:
                 return False, 0
             else:
                 return True, result[0]
 
-    def onSearchPlan(planid):
+    def getPlanName(planid):
         # args planid
         # return planname
         db.ping(reconnect=True)
@@ -314,38 +349,43 @@ class Module():
             cursor.execute(
                 "SELECT name FROM v2_plan WHERE id = %s", (planid))
             result = cursor.fetchone()
-            print(result)
             return result[0]
 
-    def onSearchInvite(id):
+    def getInviteCode(uid):
         # args user id
         # return code,status,pv
         db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
-                "SELECT code,status,pv FROM v2_invite_code WHERE user_id = %s", (id))
+                "SELECT code,status,pv FROM v2_invite_code WHERE user_id = %s", (uid))
             result = cursor.fetchone()
-            print(result)
             return result
 
-    def getAllPlan():
+    def getPlanAll():
         # return planID & Name (Only enable plan)
         db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
                 "SELECT id,name FROM v2_plan WHERE `show` = 1")
             result = cursor.fetchall()
-            print(result)
             return result
 
-
-class Command():
-    def onBind(uid, email):
-        # args uid,email
+    def getInviteTimes(uid):
         db.ping(reconnect=True)
         with db.cursor() as cursor:
             cursor.execute(
-                "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(uid), email))
+                "SELECT * FROM v2_user WHERE invite_user_id =  %s", (uid))
+            result = cursor.fetchall()
+            return len(result)
+
+
+class Command:
+    def onBind(tid, email):
+        # args tid,email
+        db.ping(reconnect=True)
+        with db.cursor() as cursor:
+            cursor.execute(
+                "UPDATE v2_user SET telegram_id = %s WHERE email = %s", (int(tid), email))
 
     def onUnBind(email):
         # args email
@@ -355,26 +395,28 @@ class Command():
                 "UPDATE v2_user SET telegram_id = NULL WHERE email = %s", (email))
 
     def onBuyPlan():
-        plan = Module.getAllPlan()
+        text = '📦*购买套餐*\n\n🌐点击下方按钮来前往购买地址'
+        plan = Module.getPlanAll()
         keyboard = []
         url = f'{v2_url}/#/plan/'
         for i in plan:
             keyboard.append([InlineKeyboardButton(
                 text=f'购买 {i[1]}', url=f"{url}{i[0]}")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        return reply_markup
+        return text, reply_markup
 
     def onWebsite():
+        text = '🗺*前往网站*\n\n🌐点击下方按钮来前往网站地址'
         keyboard = [[InlineKeyboardButton(text='打开网站', url=f"{v2_url}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        return reply_markup
+        return text, reply_markup
 
     def onMyInfo(user):
         text = '📋*个人信息*\n'
-        User_id = user['id']
+        User_id = user['uid']
         Register_time = time.strftime(
             "%Y-%m-%d %H:%M:%S", time.localtime(user['register']))
-        Plan_id = Module.onSearchPlan(user['plan'])
+        Plan_id = Module.getPlanName(user['plan'])
         Expire_time = '长期有效'
         if user['expire'] is not None:
             Expire_time = time.strftime(
@@ -409,14 +451,33 @@ class Command():
 
         return text, reply_markup
 
-    def onMyInvite(invite_code):
-        code, status, pv = invite_code[0], invite_code[1], invite_code[2]
+    def onMyInvite(invite_code, invite_times):
+        code = invite_code[0]
         header = '📚*邀请信息*\n\n🔮邀请地址为（点击即可复制）：\n'
         tolink = f'`{v2_url}/#/register?code={code}`'
-        buttom = f'\n\n⚙️*状态：* {status}\n👪*人数：* {pv}'
+        buttom = f'\n\n👪*邀请人数：* {invite_times}'
         text = f'{header}{tolink}{buttom}'
 
         return text
+
+    def onMyUsage(stat):
+        current_date = datetime.datetime.now(tz).strftime("%Y-%m-%d")
+        today_usage = 0
+        for i in stat:
+            today_date = i[6]
+            ltime = time.localtime(today_date)
+            today_date = time.strftime("%Y-%m-%d", ltime)
+            if today_date == current_date:
+                today_usage = today_usage + i[4]
+        today_usage = round(today_usage / 1024 / 1024 / 1024, 2)
+
+        text = f'📚*今日流量*\n\n📈本日总计使用流量为：*{today_usage} GB*\n'
+        text = f'{text}\n📜*详细流量记录请点击下方按钮*'
+        keyboard = [[InlineKeyboardButton(
+            text='流量明细', url=f"{v2_url}/#/traffic")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        return text, reply_markup
 
 
 def main() -> None:
@@ -430,6 +491,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("unbind", unbind, run_async=True))
     dispatcher.add_handler(CommandHandler("mysub", mysub, run_async=True))
     dispatcher.add_handler(CommandHandler("myinfo", myinfo, run_async=True))
+    dispatcher.add_handler(CommandHandler("myusage", myusage, run_async=True))
     dispatcher.add_handler(CommandHandler(
         "myinvite", myinvite, run_async=True))
     dispatcher.add_handler(CommandHandler("buyplan", buyplan, run_async=True))
