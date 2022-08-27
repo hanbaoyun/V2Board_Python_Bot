@@ -4,6 +4,7 @@ import logging
 import requests
 import pymysql
 import time
+import threading
 from sshtunnel import SSHTunnelForwarder
 
 from telegram import Update, Bot, InlineKeyboardMarkup, InlineKeyboardButton
@@ -37,6 +38,11 @@ db = pymysql.connect(host=Config.v2_db_url,
                      database=Config.v2_db_name,
                      port=v2_db_port,
                      autocommit=True)
+
+current_list = {
+    'ticket': 0,
+    'order': 0
+}
 
 
 def s(update: Update, context: CallbackContext) -> None:
@@ -259,6 +265,69 @@ class Module:
         bot.deleteMessage(chat_id=chatid, message_id=messageid)
         update.message.delete()
 
+    def autoSend():
+        # 待优化
+        global current_list
+        ticket = Module.getNewTicket()
+        order = Module.getNewOrder()
+        print(current_list)
+        if current_list['ticket'] != 0 and len(ticket) > current_list['ticket']:
+            for i in range(current_list['ticket'], len(ticket)):
+                print(i)
+                Result, User = Module.getUser('id', ticket[i][1])
+                Email = User['email']
+                Subject = ticket[i][2]
+                Code = {
+                    'Level': ['低', '中', '高'],
+                    'Status': ['开放', '关闭'],
+                    'Reply': ['已回复', '待回复'],
+                }
+                Level, Status, Reply = ticket[i][3], ticket[i][4], ticket[i][5]
+                Level = Code['Level'][Level]
+                Status = Code['Status'][Status]
+                Reply = Code['Reply'][Reply]
+                text = '📠*新的工单*\n\n'
+                text = f'{text}👤*用户*：`{Email}`\n'
+                text = f'{text}📩*主题*：{Subject}\n'
+                text = f'{text}🔔*级别*：{Level}\n'
+                text = f'{text}🔰*状态*：{Status}\n'
+                text = f'{text}📝*答复*：{Reply}\n'
+
+                keyboard = [[InlineKeyboardButton(
+                    text='回复工单', url=f"{Config.v2_url}/admin#/ticket/{i+1}")]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                bot.send_message(
+                    chat_id=Config.tg_admin,
+                    text=text,
+                    parse_mode='Markdown',
+                    reply_markup=reply_markup
+                )
+                # id,user_id,subject,level,status,reply_status
+        if current_list['order'] != 0 and len(order) > current_list['order']:
+            pass
+        current_list = {
+            'ticket': len(ticket),
+            'order': len(order)
+        }
+        timer = threading.Timer(60, Module.autoSend)
+        timer.start()
+
+    def getNewTicket():
+        db.ping(reconnect=True)
+        with db.cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM v2_ticket")
+            result = cursor.fetchall()
+            return result
+
+    def getNewOrder():
+        db.ping(reconnect=True)
+        with db.cursor() as cursor:
+            cursor.execute(
+                "SELECT * FROM v2_order")
+            result = cursor.fetchall()
+            return result
+
     def onLogin(email, password):
         login = {
             "email": email,
@@ -360,7 +429,6 @@ class Module:
             return len(result)
 
 
-
 def main() -> None:
     updater = Updater(Config.bot_token)
 
@@ -383,4 +451,6 @@ def main() -> None:
 
 
 if __name__ == '__main__':
+    timer = threading.Timer(1, Module.autoSend)
+    timer.start()
     main()
